@@ -1,0 +1,68 @@
+---
+title: "Rstan and bayes"
+format: html
+editor: visual
+---
+
+```{r}
+#May need xcode app and xcode-select --install to be run in command line
+install.packages("rstan")
+install.packages(c("coda","mvtnorm","devtools","dagitty")) 
+library(devtools) 
+library(rstan)
+install.packages(c('coda','mvtnorm')) 
+options(repos=c(getOption('repos'),rethinking='http://xcelab.net/R')) 
+install.packages('rethinking',type='source')
+library(rethinking)
+```
+
+```         
+Warning thrown by rstan
+
+Warning: package ‘rstan’ was built under R version 4.3.3Loading required package: StanHeaders
+
+rstan version 2.32.7 (Stan version 2.32.2)
+
+For execution on a local, multicore CPU with excess RAM we recommend calling
+options(mc.cores = parallel::detectCores()).
+To avoid recompilation of unchanged Stan programs, we recommend calling
+rstan_options(auto_write = TRUE)
+For within-chain threading using `reduce_sum()` or `map_rect()` Stan functions,
+change `threads_per_chain` option:
+rstan_options(threads_per_chain = 1)
+```
+
+```{r}
+#| label: from stat rethinking chapter 2
+## R code 2.1
+
+#ways to observe WLW under the reality of pW=0,0.25,0.5,0.75,1
+ways <- c( 0 , 3 , 8 , 9 , 0 )
+#Relative plausibility
+ways/sum(ways)
+
+## R code 2.2
+#Rather than a specific sequence we now consider 6 'success' from 9 'trials' and get the likelihood of that under equal chance of success and failure
+dbinom( 6 , size=9 , prob=0.5 )
+
+## R code 2.3
+# define grid
+p_grid <- seq( from=0 , to=1 , length.out=20 )
+
+# define prior
+prior <- rep( 1 , 20 )
+
+# compute likelihood at each value in grid
+likelihood <- dbinom( 6 , size=9 , prob=p_grid )
+
+# compute product of likelihood and prior
+unstd.posterior <- likelihood * prior
+
+# standardize the posterior, so it sums to 1
+posterior <- unstd.posterior / sum(unstd.posterior)
+
+## R code 2.4
+plot( p_grid , posterior , type="b" ,
+    xlab="probability of water" , ylab="posterior probability" )
+mtext( "20 points" )
+```
