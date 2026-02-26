@@ -5,15 +5,32 @@ editor: visual
 ---
 
 ```{r}
-#May need xcode app and xcode-select --install to be run in command line
-install.packages("rstan")
-install.packages(c("coda","mvtnorm","devtools","dagitty")) 
-library(devtools) 
+library(tidyverse)
+
+#Not run -- installation and making sure gfortran and xcode are in place
+#remotes::install_github("coatless-mac/macrtools")
+#macrtools::xcode_cli_uninstall()
+#macrtools::macos_rtools_install()
+#macrtools::is_xcode_cli_installed()
+#macrtools::is_gfortran_installed()
+#macrtools::is_xcode_app_installed()
+#macrtools::xcode_cli_install() 
+#remove.packages("rstan")
+#if (file.exists(".RData")) file.remove(".RData")
+#remove.packages(c("StanHeaders", "rstan"))
+# install.packages(c("StanHeaders", "rstan"))
+# remove.packages(c("brms"))
+# install.packages("brms")
+
+library(StanHeaders)
 library(rstan)
-install.packages(c('coda','mvtnorm')) 
-options(repos=c(getOption('repos'),rethinking='http://xcelab.net/R')) 
-install.packages('rethinking',type='source')
-library(rethinking)
+library(brms)
+options(mc.cores = (parallel::detectCores()-2))
+rstan_options(auto_write = TRUE)
+example(stan_model, package = "rstan", run.dontrun = TRUE)
+
+
+
 ```
 
 ```         
@@ -32,37 +49,176 @@ change `threads_per_chain` option:
 rstan_options(threads_per_chain = 1)
 ```
 
+Here's a useful quote:
+
+::: callout-note
+## Frequentist null hypothesis significance testing (NHST) determines the probability of the data given a null hypothesis (yielding results that are often unwieldy, phrased as the probability of rejecting the null if it is true \[...\]. In contrast, Bayesian analysis determines the probability of a hypothesis given the data, resulting in probabilities that are directly interpretable.
+
+https://www.andrewheiss.com/blog/2019/01/29/diff-means-half-dozen-ways/
+:::
+
 ```{r}
 #| label: from stat rethinking chapter 2
 ## R code 2.1
 
 #ways to observe WLW under the reality of pW=0,0.25,0.5,0.75,1
 ways <- c( 0 , 3 , 8 , 9 , 0 )
-#Relative plausibility
+#Relative plausibility or LIKELIHOOD? (am I getting this right)
 ways/sum(ways)
 
 ## R code 2.2
-#Rather than a specific sequence we now consider 6 'success' from 9 'trials' and get the likelihood of that under equal chance of success and failure
-dbinom( 6 , size=9 , prob=0.5 )
+#Rather than a specific sequence we now consider 6 'success' from 9 'trials' and get the likelihood of that under 50:50 chance of success and failure
+dbinom(6 , size=9 , prob=0.5)
 
 ## R code 2.3
-# define grid
+
+#Grid approximation is a basic way of estimating the posterior which is not used as frequently as markov chain monte carlo (e.g. rstan&brms) but is simple to explain and similar basic principles
+
+# define grid - values at which to calculate posterior
 p_grid <- seq( from=0 , to=1 , length.out=20 )
 
-# define prior
+# define prior - equal chance of all 20 values
 prior <- rep( 1 , 20 )
 
-# compute likelihood at each value in grid
+# compute likelihood (of our observation 6 success from 9 trials) at each value in grid
 likelihood <- dbinom( 6 , size=9 , prob=p_grid )
 
 # compute product of likelihood and prior
+# unstandardised posterior
 unstd.posterior <- likelihood * prior
 
 # standardize the posterior, so it sums to 1
+sum(unstd.posterior)#originally 1.9
 posterior <- unstd.posterior / sum(unstd.posterior)
+sum(posterior)
 
-## R code 2.4
+## R code 2.4 - plot our posterior
 plot( p_grid , posterior , type="b" ,
     xlab="probability of water" , ylab="posterior probability" )
 mtext( "20 points" )
+```
+
+```{r}
+#| label: using brms
+
+#create some simple fake data
+independent_continuous<-rnorm(100,mean=50,sd=5)
+dependent_continuous<-c(rnorm(50,mean=1,sd=0.1)*independent_continuous[1:50],
+                        10+(rnorm(50,mean=1,sd=0.1)*independent_continuous[51:100]))
+independent_discrete<-rep(c("A","B"),each=50)
+cbind(independent_continuous,dependent_continuous,independent_discrete)%>%as.data.frame()->df_mock
+df_mock$independent_continuous%<>%as.numeric()
+df_mock$dependent_continuous%<>%as.numeric()
+
+#plot the data
+ggplot(df_mock,aes(independent_continuous,dependent_continuous,
+                   col=independent_discrete))+
+  geom_point()+
+  geom_smooth(method="lm")
+
+#fit a bayesian model using brm
+fit_mock <- brm(dependent_continuous ~ independent_continuous*independent_discrete, 
+                data = df_mock)
+#View the summary
+summary(fit_mock)
+#Plot the posterior distributions
+plot(fit_mock)
+#Compare the slope of B to 0
+hypothesis(fit_mock, "independent_continuous:independent_discreteB + independent_continuous = 0")
+#Look at the default priors
+prior_summary(fit_mock)#prior for intercept is 54.9 (mean of dependent variable) & prior for slope is 0
+
+#Refit the model using a predefined prior
+fit_mock_prior <- brm(dependent_continuous ~ independent_continuous*independent_discrete, 
+                data = df_mock,
+                prior = prior(student_t(1, -0.1, 0.1), coef = independent_continuous))
+#See the new summary
+summary(fit_mock_prior)
+# #Plot the posteriors with credible intervals
+post <- posterior_samples(fit_mock, add_chain = T)
+# bayesplot::mcmc_areas(
+#   post, 
+#   pars       = c("b_independent_continuous",
+#                  "b_independent_discreteB"),
+#   prob       = 0.5,
+#   prob_outer = 0.95,
+#   point_est  = "mean"
+# ) +
+#   scale_y_discrete(NULL, breaks = NULL) +
+#   labs(title = "posterior",
+#        x     = expression(theta)) +
+#   theme(panel.grid = element_blank())
+summary(fit_mock)->sum_fit
+sum_fit$fixed%>%as.data.frame()->coef_fit
+ggplot(post,aes(b_independent_discreteB))+geom_histogram()
+ggplot(post,aes(b_independent_discreteB))+geom_density()+geom_vline(xintercept=10)+
+  geom_vline(col='blue',
+             xintercept=coef_fit[3,4])+
+  geom_vline(col='blue',
+             xintercept=coef_fit[3,3])+
+  ylab("Density")
+  
+#Fit a frequentist comparison and 
+lm(dependent_continuous ~ independent_continuous*independent_discrete, 
+                data = df_mock)->fit_freq
+fit_freq%>%summary()%>%coef()%>%as.data.frame()->mean_freq
+confint(fit_freq)%>%as.data.frame()->coef_freq
+
+ggplot(post,aes(b_independent_discreteB))+geom_density()+
+  geom_vline(xintercept=coef_fit[3,1],col='blue')+
+  geom_vline(col='blue',
+             xintercept=coef_fit[3,4],lty=2)+
+  geom_vline(col='blue',
+             xintercept=coef_fit[3,3],lty=2)+
+  ylab("Density")+
+  geom_segment(y=0.02,yend=0.02,
+               x=coef_freq[3,1],
+               xend=coef_freq[3,2],col='red')+
+  annotate(geom="point",
+           x=mean_freq[3,1],
+           y=0.02,
+           col='red')
+
+
+#Dealing with missing data - interpolation
+#install.packages("mice")
+library(mice)
+data("nhanes", package = "mice")
+head(nhanes)
+imp <- mice(nhanes, m = 5, print = FALSE)
+fit_imp1 <- brm_multiple(bmi ~ age*chl, data = imp, chains = 2)
+summary(fit_imp1)
+plot(fit_imp1)
+
+imp20 <- mice(nhanes, m = 20, print = FALSE)
+fit_imp20 <- brm_multiple(bmi ~ age*chl, data = imp20, chains = 2)
+summary(fit_imp20)
+plot(fit_imp1)
+
+#12 values missing
+ggplot(nhanes,aes(chl,bmi,col=age))+geom_point()
+
+fit_noimp <- brm(bmi ~ age*chl, data = nhanes%>%subset(!is.na(chl)&
+                                                                 !is.na(bmi)))
+summary(fit_noimp)
+lm(bmi ~ age*chl, data = nhanes)->frequentist_version
+frequentist_version%>%summary()
+confint(frequentist_version)
+
+conditional_effects(fit_imp20, "age:chl")
+conditional_effects(fit_imp20, "chl")
+conditional_effects(fit_imp20, "age")
+conditional_effects(fit_imp20, "chl:age")
+
+
+#beta regression in brms
+read_csv("ExampleData_Virus.csv")->VirusData
+    fit_virus <- brm(formula = DVGness ~ (VirusGenotype)*(HostGroup),
+                   data = VirusData,
+                   family = Beta(link = "logit", link_phi = "log"))
+summary(fit_virus)
+plot(fit_virus)
+hypothesis(fit_virus, "VirusGenotypeD1.1 = Intercept")
+
+
 ```
