@@ -134,6 +134,11 @@ fit_mock_prior <- brm(dependent_continuous ~ independent_continuous*independent_
                 prior = prior(student_t(1, -0.1, 0.1), coef = independent_continuous))
 #See the new summary
 summary(fit_mock_prior)
+# check systematic discrepancies here
+pp_check(fit_mock, nsamples = 100)
+pp_check(fit_mock, nsamples = 1000, type = "stat_2d")
+pp_check(fit_mock, nsamples = 100, type = "scatter_avg")
+pp_check(fit_mock_prior, nsamples = 100)
 # #Plot the posteriors with credible intervals
 post <- posterior_samples(fit_mock, add_chain = T)
 # bayesplot::mcmc_areas(
@@ -209,16 +214,23 @@ conditional_effects(fit_imp20, "age:chl")
 conditional_effects(fit_imp20, "chl")
 conditional_effects(fit_imp20, "age")
 conditional_effects(fit_imp20, "chl:age")
-
+pp_check(fit_imp20, nsamples = 100)
 
 #beta regression in brms
 read_csv("ExampleData_Virus.csv")->VirusData
+
+ggplot(VirusData,aes(DVGness,VirusGenotype))+
+  geom_boxplot()+
+  facet_wrap(~HostGroup,ncol=1)
+
     fit_virus <- brm(formula = DVGness ~ (VirusGenotype)*(HostGroup),
                    data = VirusData,
                    family = Beta(link = "logit", link_phi = "log"))
 summary(fit_virus)
 plot(fit_virus)
-hypothesis(fit_virus, "VirusGenotypeD1.1 = Intercept")
+#Do the hostgroups differ in DVGness under D1.1 infection
+hypothesis(fit_virus, "Intercept + VirusGenotypeD1.1 + VirusGenotypeD1.1:HostGroupWaterfowlAnseriformes + HostGroupWaterfowlAnseriformes = Intercept + VirusGenotypeD1.1")
 
-
+stanplot(fit_virus, pars = "VirusGenotypeD1.1", type = "areas")
+pp_check(fit_virus, nsamples = 100)
 ```
