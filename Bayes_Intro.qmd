@@ -49,6 +49,8 @@ change `threads_per_chain` option:
 rstan_options(threads_per_chain = 1)
 ```
 
+Here's the Statistical Rethinking textbook and youtube lectures etc which are widely recommended as a go to for understanding bayesian statistics: https://xcelab.net/rm/
+
 Here's a useful quote:
 
 ::: callout-note
@@ -56,6 +58,10 @@ Here's a useful quote:
 
 https://www.andrewheiss.com/blog/2019/01/29/diff-means-half-dozen-ways/
 :::
+
+This set of course notes also seems useful: https://bookdown.org/marklhc/notes_bookdown/introduction.html
+
+This book has also been recommended: https://yalebooks.yale.edu/book/9780300188226/the-theory-that-would-not-die/
 
 ```{r}
 #| label: from stat rethinking chapter 2
